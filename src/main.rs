@@ -1,25 +1,29 @@
-use std::collections::HashMap;
+#![feature(iter_intersperse)]
+
+use std::collections::BTreeMap;
 use std::env;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use gold_pass_bot::{ClanTag, CurrentWarState, RaidMember, RaidWeekendStats, Season, Storage};
 use serenity::async_trait;
 use serenity::framework::standard::macros::{command, group};
 use serenity::framework::standard::{CommandResult, StandardFramework};
 use serenity::model::channel::Message;
 use serenity::prelude::*;
+use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
+
+use arc_swap::ArcSwap;
 
 #[group]
-#[commands(state)]
+#[commands(stats)]
 struct General;
 
 struct Handler;
 
-struct ClanState {}
-
 struct ClanStates;
 impl TypeMapKey for ClanStates {
-    type Value = Arc<RwLock<HashMap<String, ClanState>>>;
+    type Value = Arc<ArcSwap<(Storage, u64)>>;
 }
 
 #[async_trait]
@@ -27,6 +31,11 @@ impl EventHandler for Handler {}
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    let layers = tracing_subscriber::registry()
+        .with(gold_pass_bot::TracingCrateFilter {})
+        .with(tracing_subscriber::fmt::layer());
+    tracing::subscriber::set_global_default(layers).unwrap();
+
     let framework = StandardFramework::new()
         .configure(|c| c.prefix("!"))
         .group(&GENERAL_GROUP);
@@ -41,37 +50,130 @@ async fn main() {
         .await
         .expect("Error creating client");
 
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let storage = Storage::load("data.json")
+        .await
+        .unwrap_or_else(|_| Storage::empty());
+    let shared_storage = Arc::new(ArcSwap::new(Arc::new((storage, elapsed))));
     {
         let mut data = client.data.write().await;
-        data.insert::<ClanStates>(Arc::new(RwLock::new(HashMap::new())));
+        data.insert::<ClanStates>(shared_storage.clone());
     }
 
     tokio::spawn(async move {
-        let key = tokio::fs::read_to_string("api.key").await.unwrap();
-        let client = gold_pass_bot::Client::new(key);
+        let raw_key = tokio::fs::read_to_string("api.key").await.unwrap();
+        let key = raw_key
+            .as_str()
+            .strip_suffix("\n")
+            .unwrap_or(raw_key.as_str());
+        let client = gold_pass_bot::Client::new(key.to_string());
+
+        let alfie_tag = "#2L99VLJ9P";
+
+        let mut storage = Storage::empty();
+        storage.register_clan(ClanTag(alfie_tag.to_string()));
 
         loop {
-            if let Ok(w) = client.current_war("#2L99VLJ9P").await {
-                dbg!(w);
-            }
-            if let Ok(w) = client.clan_war_league_group("#2L99VLJ9P").await {
-                dbg!(&w);
+            let season = Season::current();
 
-                for round in w.rounds.iter() {
-                    for tag in round.war_tags.iter() {
-                        if tag.0.as_str() == "#0" {
-                            continue;
-                        }
+            for tag in [ClanTag(alfie_tag.to_string())] {
+                let update_span = tracing::span!(tracing::Level::INFO, "UpdateClanStats");
+                let _tmp = update_span.enter();
 
-                        dbg!(tag);
-                        if let Ok(w) = client.clan_war_league_war(&tag).await {
-                            dbg!(w);
+                tracing::debug!("Updating Clan Stats: {:?}", tag);
+
+                let clan_season_stats = match storage.get_mut(&tag, &season) {
+                    Some(s) => s,
+                    None => {
+                        tracing::error!(
+                            "Getting Stats entry for Clan {:?} and Season {:?}",
+                            tag,
+                            season
+                        );
+                        continue;
+                    }
+                };
+
+                match client.war().current(&tag).await {
+                    Ok(w) => {
+                        if !matches!(w.state, CurrentWarState::War) {
+                            tracing::info!("WAR: Not in War currently");
+                        } else {
+                            tracing::debug!("Register War Metrics: {:#?}", w);
                         }
                     }
-                }
+                    Err(e) => {
+                        tracing::error!("Error loading War: {:?}", e);
+                    }
+                };
+
+                gold_pass_bot::update_names(&client, &tag, clan_season_stats).await;
+
+                gold_pass_bot::update_cwl(&client, &tag, &mut storage).await;
+
+                match client.captial_raid_seasons(&tag).await {
+                    Ok(raid_res) => {
+                        for raid in raid_res.items {
+                            tracing::debug!("Start-Time: {:?}", raid.startTime);
+                            let members = match raid.members {
+                                Some(m) => m
+                                    .into_iter()
+                                    .map(|member| {
+                                        (
+                                            member.tag,
+                                            RaidMember {
+                                                looted: member.capitalResourcesLooted,
+                                            },
+                                        )
+                                    })
+                                    .collect(),
+                                None => {
+                                    tracing::trace!(
+                                        "Skipping weekend, because there is no member list"
+                                    );
+
+                                    continue;
+                                }
+                            };
+
+                            let start_time = raid.startTime;
+
+                            let clan_season_stats =
+                                storage.get_mut(&tag, &raid.startTime.into()).unwrap();
+
+                            clan_season_stats.raid_weekend.insert(
+                                start_time.clone(),
+                                RaidWeekendStats {
+                                    start_time,
+                                    members,
+                                },
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Error loading Capital Raid Seasons: {:?}", e);
+                    }
+                };
+
+                drop(_tmp);
             }
 
-            tokio::time::sleep(Duration::from_secs(30)).await;
+            let elapsed = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            shared_storage.swap(Arc::new((storage.clone(), elapsed)));
+
+            if let Err(e) = storage.save("data.json").await {
+                tracing::error!("Saving Storage: {:?}", e);
+            }
+
+            tracing::info!("Done Updating Stats");
+
+            tokio::time::sleep(Duration::from_secs(90)).await;
         }
     });
 
@@ -82,10 +184,95 @@ async fn main() {
 }
 
 #[command]
-async fn state(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.channel_id
-        .send_message(&ctx.http, |m| m.content("Testing"))
-        .await?;
+async fn stats(ctx: &Context, msg: &Message) -> CommandResult {
+    let guard = ctx.data.read().await;
+    let storage: &Arc<ArcSwap<_>> = guard.get::<ClanStates>().unwrap();
+
+    let stats_guard = storage.load();
+    let (stats, timestamp) = stats_guard.as_ref();
+
+    let alfie_tag = ClanTag("#2L99VLJ9P".to_string());
+
+    let season = Season::current();
+    tracing::trace!("Displaying stats for season: {:?}", season);
+
+    let clan_stats = stats.get(&alfie_tag, &season).expect("");
+
+    let player_count = clan_stats.players_summary().count();
+    tracing::trace!("Sending Summary for {} Players", player_count);
+
+    let max_name_length = clan_stats
+        .players_summary()
+        .map(|(n, _)| {
+            clan_stats
+                .player_names
+                .get(&n)
+                .map(|n| n.len())
+                .unwrap_or(0)
+        })
+        .max()
+        .unwrap_or(0);
+
+    let padding_width = 11.max(max_name_length);
+    let header_padding_width = padding_width.saturating_sub(11);
+
+    let player_summaries: BTreeMap<_, _> = clan_stats
+        .players_summary()
+        .map(|(tag, v)| (clan_stats.player_names.get(&tag).unwrap(), v))
+        .collect();
+
+    const PLAYER_PER_MESSAGE: usize = 35;
+    for batch in 0..(player_count / PLAYER_PER_MESSAGE + 1) {
+        tracing::trace!("Sending Batch: {}", batch);
+
+        let summary: String = core::iter::once(format!(
+            "```Player Tag {:width$}| CWL | Wars | Raids | Games",
+            ' ',
+            width = header_padding_width
+        ))
+        .chain(core::iter::once(
+            core::iter::repeat('-')
+                .take(40 + padding_width.saturating_sub(11))
+                .collect(),
+        ))
+        .chain(
+            player_summaries
+                .iter()
+                .skip(batch * PLAYER_PER_MESSAGE)
+                .take(PLAYER_PER_MESSAGE)
+                .map(|(name, sum)| {
+                    format!(
+                        "{:width$}|  {:2} |   {:2} | {:5} |    {:2}",
+                        name,
+                        sum.cwl_stars,
+                        sum.war_stars,
+                        sum.raid_loot,
+                        sum.games_score,
+                        width = padding_width
+                    )
+                }),
+        )
+        .chain(core::iter::once("```".to_string()))
+        .intersperse("\n".to_string())
+        .collect();
+        tracing::trace!("Summary message length: {:?}", summary.len());
+
+        if let Err(e) = msg
+            .channel_id
+            .send_message(&ctx.http, |m| {
+                m.content(format!(
+                    "{}\nTimestamp: {}\n{}/{}",
+                    summary,
+                    timestamp,
+                    batch + 1,
+                    player_count / 25 + 1
+                ))
+            })
+            .await
+        {
+            tracing::error!("Sending Response: {:?}", e);
+        }
+    }
 
     Ok(())
 }

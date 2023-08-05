@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 mod custom_serde {
     use serde::de::Visitor;
@@ -16,7 +16,6 @@ mod custom_serde {
         where
             E: serde::de::Error,
         {
-            dbg!(&v);
             if !v.starts_with("#") {
                 return Err(serde::de::Error::invalid_value(
                     serde::de::Unexpected::Str(v.as_str()),
@@ -31,7 +30,6 @@ mod custom_serde {
         where
             E: serde::de::Error,
         {
-            dbg!(&v);
             if !v.starts_with("#") {
                 return Err(serde::de::Error::invalid_value(
                     serde::de::Unexpected::Str(v),
@@ -44,7 +42,7 @@ mod custom_serde {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct ClanTag(pub String);
 
 impl<'de> Deserialize<'de> for ClanTag {
@@ -57,7 +55,16 @@ impl<'de> Deserialize<'de> for ClanTag {
     }
 }
 
-#[derive(Debug, PartialEq)]
+impl Serialize for ClanTag {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct WarTag(pub String);
 
 impl<'de> Deserialize<'de> for WarTag {
@@ -70,7 +77,16 @@ impl<'de> Deserialize<'de> for WarTag {
     }
 }
 
-#[derive(Debug, PartialEq)]
+impl Serialize for WarTag {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct PlayerTag(pub String);
 
 impl<'de> Deserialize<'de> for PlayerTag {
@@ -80,6 +96,15 @@ impl<'de> Deserialize<'de> for PlayerTag {
     {
         let inner = deserializer.deserialize_string(custom_serde::TagVisitor {})?;
         Ok(Self(inner))
+    }
+}
+
+impl Serialize for PlayerTag {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
     }
 }
 
