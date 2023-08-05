@@ -37,6 +37,7 @@ async fn main() {
     tracing::subscriber::set_global_default(layers).unwrap();
 
     let store_path = std::env::var("STORE_PATH").unwrap_or_else(|_| "data.json".to_string());
+    let api_path = std::env::var("API_PATH").unwrap_or_else(|_| "api.key".to_string());
 
     let framework = StandardFramework::new()
         .configure(|c| c.prefix("!"))
@@ -66,7 +67,7 @@ async fn main() {
     }
 
     tokio::spawn(async move {
-        let raw_key = tokio::fs::read_to_string("api.key").await.unwrap();
+        let raw_key = tokio::fs::read_to_string(api_path).await.unwrap();
         let key = raw_key
             .as_str()
             .strip_suffix("\n")
