@@ -36,6 +36,8 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer());
     tracing::subscriber::set_global_default(layers).unwrap();
 
+    let store_path = std::env::var("STORE_PATH").unwrap_or_else(|_| "data.json".to_string());
+
     let framework = StandardFramework::new()
         .configure(|c| c.prefix("!"))
         .group(&GENERAL_GROUP);
@@ -54,7 +56,7 @@ async fn main() {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    let storage = Storage::load("data.json")
+    let storage = Storage::load(&store_path)
         .await
         .unwrap_or_else(|_| Storage::empty());
     let shared_storage = Arc::new(ArcSwap::new(Arc::new((storage, elapsed))));
@@ -167,7 +169,7 @@ async fn main() {
                 .as_secs();
             shared_storage.swap(Arc::new((storage.clone(), elapsed)));
 
-            if let Err(e) = storage.save("data.json").await {
+            if let Err(e) = storage.save(&store_path).await {
                 tracing::error!("Saving Storage: {:?}", e);
             }
 
