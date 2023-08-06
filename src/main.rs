@@ -1,22 +1,26 @@
 #![feature(iter_intersperse)]
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::env;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use gold_pass_bot::{ClanTag, CurrentWarState, RaidMember, RaidWeekendStats, Season, Storage};
+use gold_pass_bot::{
+    ClanTag, CurrentWarState, ExcelStats, RaidMember, RaidWeekendStats, Season, Storage,
+};
 use serenity::async_trait;
 use serenity::framework::standard::macros::{command, group};
 use serenity::framework::standard::{CommandResult, StandardFramework};
 use serenity::model::channel::Message;
+use serenity::model::prelude::AttachmentType;
 use serenity::prelude::*;
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 
 use arc_swap::ArcSwap;
 
 #[group]
-#[commands(stats)]
+#[commands(stats, export)]
 struct General;
 
 struct Handler;
@@ -39,8 +43,12 @@ async fn main() {
     let store_path = std::env::var("STORE_PATH").unwrap_or_else(|_| "data.json".to_string());
     let api_path = std::env::var("API_PATH").unwrap_or_else(|_| "api.key".to_string());
 
+    #[cfg(not(debug_assertions))]
+    let prefix = "!";
+    #[cfg(debug_assertions)]
+    let prefix = "+";
     let framework = StandardFramework::new()
-        .configure(|c| c.prefix("!"))
+        .configure(|c| c.prefix(prefix))
         .group(&GENERAL_GROUP);
 
     // Login with a bot token from the environment
@@ -181,7 +189,7 @@ async fn main() {
     });
 
     // start listening for events by starting a single shard
-    if let Err(why) = client.start().await {
+    if let Err(why) = client.start_autosharded().await {
         println!("An error occurred while running the client: {:?}", why);
     }
 }
@@ -275,6 +283,42 @@ async fn stats(ctx: &Context, msg: &Message) -> CommandResult {
         {
             tracing::error!("Sending Response: {:?}", e);
         }
+    }
+
+    Ok(())
+}
+
+#[command]
+async fn export(ctx: &Context, msg: &Message) -> CommandResult {
+    let guard = ctx.data.read().await;
+    let storage: &Arc<ArcSwap<_>> = guard.get::<ClanStates>().unwrap();
+
+    let stats_guard = storage.load();
+    let (stats, timestamp) = stats_guard.as_ref();
+
+    let alfie_tag = ClanTag("#2L99VLJ9P".to_string());
+
+    let season = Season::current();
+    tracing::trace!("Displaying stats for season: {:?}", season);
+
+    let clan_stats = stats.get(&alfie_tag, &season).expect("");
+
+    let mut excel_book = ExcelStats::new().populate_workbook(clan_stats);
+    let content = excel_book.save_to_buffer().unwrap();
+
+    if let Err(e) = msg
+        .channel_id
+        .send_files(
+            &ctx.http,
+            [AttachmentType::Bytes {
+                data: Cow::Borrowed(&content),
+                filename: "Tracker.xlsx".to_owned(),
+            }],
+            |m| m.content("Populated Spreadsheet"),
+        )
+        .await
+    {
+        tracing::error!("Sending Excel Stats: {:?}", e);
     }
 
     Ok(())

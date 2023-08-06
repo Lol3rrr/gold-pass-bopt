@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display,
     path::Path,
 };
 
@@ -198,21 +197,7 @@ impl ClanStorage {
     pub fn players_summary(&self) -> impl Iterator<Item = (PlayerTag, PlayerSummary)> + '_ {
         // TODO
         // Get all the players we have some data for
-        let players = {
-            let mut tmp = HashSet::new();
-
-            for war in self.cwl.wars.iter() {
-                tmp.extend(war.members.keys().cloned());
-            }
-            for war in self.wars.values() {
-                tmp.extend(war.members.keys().cloned());
-            }
-            for raid in self.raid_weekend.values() {
-                tmp.extend(raid.members.keys().cloned());
-            }
-
-            tmp
-        };
+        let players: HashSet<PlayerTag> = self.player_names.keys().cloned().collect();
 
         players.into_iter().map(|ptag| {
             let cwl_stars: usize = self

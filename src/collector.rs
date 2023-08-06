@@ -260,6 +260,7 @@ impl Client {
 pub async fn update_names(client: &Client, clan: &ClanTag, clan_season_stats: &mut ClanStorage) {
     let info = client.clan_info(clan).await.unwrap();
 
+    clan_season_stats.player_names.clear();
     for member in info.memberList {
         clan_season_stats
             .player_names
