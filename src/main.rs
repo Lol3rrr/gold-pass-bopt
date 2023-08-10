@@ -108,20 +108,9 @@ async fn main() {
                     }
                 };
 
-                match client.war().current(&tag).await {
-                    Ok(w) => {
-                        if !matches!(w.state, CurrentWarState::War) {
-                            tracing::info!("WAR: Not in War currently");
-                        } else {
-                            tracing::debug!("Register War Metrics: {:#?}", w);
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!("Error loading War: {:?}", e);
-                    }
-                };
-
                 gold_pass_bot::update_names(&client, &tag, clan_season_stats).await;
+
+                gold_pass_bot::update_war(&client, &tag, &mut storage).await;
 
                 gold_pass_bot::update_cwl(&client, &tag, &mut storage).await;
 

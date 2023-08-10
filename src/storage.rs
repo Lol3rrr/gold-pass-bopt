@@ -77,7 +77,7 @@ pub struct ClanStorage {
     /// All the CWL related Stats
     pub cwl: CwlStats,
     /// All the War related Stats
-    pub wars: HashMap<String, WarStats>,
+    pub wars: HashMap<Time, WarStats>,
     pub games: HashMap<PlayerTag, PlayerGamesStats>,
     pub raid_weekend: HashMap<Time, RaidWeekendStats>,
     pub player_names: HashMap<PlayerTag, String>,
@@ -100,8 +100,8 @@ pub struct CwlWarStats {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WarStats {
-    start_time: String,
-    members: HashMap<PlayerTag, MemberWarStats>,
+    pub start_time: Time,
+    pub members: HashMap<PlayerTag, MemberWarStats>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

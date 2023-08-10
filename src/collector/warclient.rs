@@ -1,7 +1,7 @@
 use reqwest::StatusCode;
 use serde::Deserialize;
 
-use crate::{ClanBadges, ClanTag, Client, LoadError, WarLog};
+use crate::{ClanBadges, ClanTag, Client, LoadError, PlayerGamesStats, PlayerTag, Time, WarLog};
 
 pub struct WarClient<'c> {
     client: &'c Client,
@@ -69,14 +69,14 @@ impl<'c> WarClient<'c> {
 #[derive(Debug, Deserialize)]
 pub struct CurrentWar {
     pub state: CurrentWarState,
-    clan: WarClan,
+    pub clan: WarClan,
     opponent: WarClan,
     #[serde(rename = "teamSize")]
     team_size: Option<usize>,
     #[serde(rename = "attacksPerMember")]
     attacks_per_member: Option<usize>,
     #[serde(rename = "startTime")]
-    start_time: Option<String>,
+    pub start_time: Option<Time>,
     #[serde(rename = "endTime")]
     end_time: Option<String>,
     #[serde(rename = "preparationStartTime")]
@@ -121,5 +121,27 @@ pub struct WarClan {
     stars: usize,
     #[serde(rename = "expEarned")]
     exp_earned: Option<f32>,
-    members: Option<Vec<serde_json::Value>>,
+    pub members: Option<Vec<WarClanMember>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WarClanMember {
+    mapPosition: usize,
+    name: String,
+    opponentAttacks: usize,
+    pub tag: PlayerTag,
+    townhallLevel: usize,
+    #[serde(default)]
+    pub attacks: Vec<WarClanMemberAttack>,
+    bestOpponentAttack: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WarClanMemberAttack {
+    pub attackerTag: PlayerTag,
+    pub defenderTag: PlayerTag,
+    pub destructionPercentage: usize,
+    pub duration: usize,
+    pub order: usize,
+    pub stars: usize,
 }

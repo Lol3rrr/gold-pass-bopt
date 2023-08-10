@@ -1,10 +1,11 @@
 use std::{borrow::Cow, collections::HashMap};
 
 use serde::Deserialize;
+use serenity::model::prelude::Member;
 
 use crate::{
     ClanStorage, ClanTag, CwlWarStats, MemberWarStats, PlayerTag, Season, Storage, WarAttack,
-    WarTag,
+    WarStats, WarTag,
 };
 
 mod api;
@@ -270,65 +271,132 @@ pub async fn update_names(client: &Client, clan: &ClanTag, clan_season_stats: &m
 
 #[tracing::instrument(skip(client, storage))]
 pub async fn update_cwl(client: &Client, clan: &ClanTag, storage: &mut Storage) {
-    match client.clan_war_league_group(clan).await {
-        Ok(w) => {
-            let war_season: Season = w.season.into();
-            let clan_season_stats = storage.get_mut(clan, &war_season).unwrap();
+    let w = match client.clan_war_league_group(clan).await {
+        Ok(w) => w,
+        Err(e) => {
+            tracing::error!("Loading Clan War League Group: {:?}", e);
+            return;
+        }
+    };
 
-            for (round_index, round) in w.rounds.iter().enumerate() {
-                for wtag in round.war_tags.iter() {
-                    if wtag.0.as_str() == "#0" {
-                        continue;
-                    }
+    let war_season: Season = w.season.into();
+    let clan_season_stats = storage.get_mut(clan, &war_season).unwrap();
 
-                    // tracing::debug!("War-Tag: {:?}", tag);
-                    if let Ok(w) = client.clan_war_league_war(&wtag).await {
-                        if &w.clan.tag != clan && &w.opponent.tag != clan {
-                            continue;
-                        }
+    for (round_index, round) in w.rounds.iter().enumerate() {
+        for wtag in round.war_tags.iter() {
+            if wtag.0.as_str() == "#0" {
+                continue;
+            }
 
-                        let clan = if &w.clan.tag == clan {
-                            w.clan
-                        } else {
-                            w.opponent
-                        };
+            // tracing::debug!("War-Tag: {:?}", tag);
+            if let Ok(w) = client.clan_war_league_war(&wtag).await {
+                if &w.clan.tag != clan && &w.opponent.tag != clan {
+                    continue;
+                }
 
-                        if clan_season_stats.cwl.wars.len() <= round_index {
-                            clan_season_stats.cwl.wars.extend(
-                                (0..(clan_season_stats.cwl.wars.len() - round_index) + 1).map(
-                                    |_| CwlWarStats {
-                                        members: HashMap::new(),
-                                    },
-                                ),
-                            );
-                        }
-                        let cwl_stats = clan_season_stats.cwl.wars.get_mut(round_index).expect("");
+                let clan = if &w.clan.tag == clan {
+                    w.clan
+                } else {
+                    w.opponent
+                };
 
-                        for member in clan.members.iter() {
-                            let member_stats = cwl_stats
-                                .members
-                                .entry(member.tag.clone())
-                                .or_insert_with(|| MemberWarStats {
-                                    attacks: Vec::new(),
-                                });
-
-                            if let Some(attacks) = &member.attacks {
-                                member_stats.attacks = attacks
-                                    .iter()
-                                    .map(|raw_attack| WarAttack {
-                                        destruction: raw_attack.destructionPercentage,
-                                        stars: raw_attack.stars,
-                                        duration: raw_attack.duration,
-                                    })
-                                    .collect();
+                if clan_season_stats.cwl.wars.len() <= round_index {
+                    clan_season_stats.cwl.wars.extend(
+                        (0..(clan_season_stats.cwl.wars.len() - round_index) + 1).map(|_| {
+                            CwlWarStats {
+                                members: HashMap::new(),
                             }
-                        }
+                        }),
+                    );
+                }
+                let cwl_stats = clan_season_stats.cwl.wars.get_mut(round_index).expect("");
+
+                for member in clan.members.iter() {
+                    let member_stats =
+                        cwl_stats
+                            .members
+                            .entry(member.tag.clone())
+                            .or_insert_with(|| MemberWarStats {
+                                attacks: Vec::new(),
+                            });
+
+                    if let Some(attacks) = &member.attacks {
+                        member_stats.attacks = attacks
+                            .iter()
+                            .map(|raw_attack| WarAttack {
+                                destruction: raw_attack.destructionPercentage,
+                                stars: raw_attack.stars,
+                                duration: raw_attack.duration,
+                            })
+                            .collect();
                     }
                 }
             }
         }
+    }
+}
+
+#[tracing::instrument(skip(client, storage))]
+pub async fn update_war(client: &Client, clan_tag: &ClanTag, storage: &mut Storage) {
+    let war = match client.war().current(&clan_tag).await {
+        Ok(w) => w,
         Err(e) => {
-            tracing::error!("Loading Clan War League Group: {:?}", e);
+            tracing::error!("Error loading War: {:?}", e);
+            return;
         }
     };
+
+    if !matches!(war.state, CurrentWarState::InWar) {
+        tracing::info!("WAR: Not in War currently {:?}", war.state);
+        return;
+    }
+
+    let clan = war.clan;
+    let members = match clan.members {
+        Some(m) => m,
+        None => {
+            tracing::error!("Current War Clan is missing Members");
+            return;
+        }
+    };
+
+    let start_time = match war.start_time {
+        Some(t) => t,
+        None => {
+            tracing::error!("Current War missing Start Time");
+            return;
+        }
+    };
+
+    let season: Season = start_time.clone().into();
+
+    let clan_season_stats = storage.get_mut(clan_tag, &season).unwrap();
+
+    // clan_season_stats.wars.insert(start_time, WarStats {});
+
+    let war_stats = WarStats {
+        start_time: start_time.clone(),
+        members: members
+            .into_iter()
+            .filter_map(|member| {
+                let war_attacks = member
+                    .attacks
+                    .into_iter()
+                    .map(|rattack| WarAttack {
+                        destruction: rattack.destructionPercentage,
+                        stars: rattack.stars,
+                        duration: rattack.duration,
+                    })
+                    .collect();
+
+                Some((
+                    member.tag,
+                    MemberWarStats {
+                        attacks: war_attacks,
+                    },
+                ))
+            })
+            .collect(),
+    };
+    clan_season_stats.wars.insert(start_time, war_stats);
 }
