@@ -68,7 +68,7 @@ async fn main() {
     let storage = Storage::load(&store_path)
         .await
         .unwrap_or_else(|_| Storage::empty());
-    let shared_storage = Arc::new(ArcSwap::new(Arc::new((storage, elapsed))));
+    let shared_storage = Arc::new(ArcSwap::new(Arc::new((storage.clone(), elapsed))));
     {
         let mut data = client.data.write().await;
         data.insert::<ClanStates>(shared_storage.clone());
@@ -84,7 +84,7 @@ async fn main() {
 
         let alfie_tag = "#2L99VLJ9P";
 
-        let mut storage = Storage::empty();
+        let mut storage = storage;
         storage.register_clan(ClanTag(alfie_tag.to_string()));
 
         loop {
@@ -112,7 +112,7 @@ async fn main() {
 
                 gold_pass_bot::update_war(&client, &tag, &mut storage).await;
 
-                gold_pass_bot::update_cwl(&client, &tag, &mut storage).await;
+                // gold_pass_bot::update_cwl(&client, &tag, &mut storage).await;
 
                 match client.captial_raid_seasons(&tag).await {
                     Ok(raid_res) => {

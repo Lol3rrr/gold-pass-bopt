@@ -135,6 +135,10 @@ impl Storage {
     }
 
     pub fn register_clan(&mut self, tag: ClanTag) {
+        if self.clans.contains_key(&tag) {
+            return;
+        }
+
         self.clans.insert(tag, HashMap::new());
     }
 
