@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, fs::OpenOptions};
 
 use serde::Deserialize;
 
@@ -39,6 +39,52 @@ pub struct ClanBadges {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct PlayerInfo {
+    clan: serde_json::Value,
+    league: Option<serde_json::Value>,
+    builderBaseLeague: Option<serde_json::Value>,
+    role: String,
+    warPreference: String,
+    attackWins: usize,
+    defenseWins: usize,
+    versusTrophies: usize,
+    bestVersusTrophies: usize,
+    townHallLevel: usize,
+    townHallWeaponLevel: Option<usize>,
+    versusBattleWins: usize,
+    legendStatistics: Option<serde_json::Value>,
+    troops: serde_json::Value,
+    heroes: serde_json::Value,
+    spells: serde_json::Value,
+    labels: serde_json::Value,
+    pub tag: PlayerTag,
+    pub name: String,
+    expLevel: usize,
+    trophies: usize,
+    bestTrophies: usize,
+    donations: usize,
+    donationsReceived: usize,
+    builderHallLevel: Option<usize>,
+    builderBaseTrophies: usize,
+    bestBuilderBaseTrophies: usize,
+    warStars: usize,
+    pub achievements: Vec<PlayerAchievement>,
+    clanCapitalContributions: usize,
+    playerHouse: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PlayerAchievement {
+    stars: usize,
+    pub value: usize,
+    pub name: String,
+    target: usize,
+    info: String,
+    completionInfo: Option<String>,
+    village: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct WarLog {
     pub items: Vec<WarLogEntry>,
 }
@@ -60,7 +106,7 @@ pub struct WarLogEntry {
 pub struct ClanInfo {
     warLeague: serde_json::Value,
     capitalLeague: serde_json::Value,
-    memberList: Vec<ClanMember>,
+    pub memberList: Vec<ClanMember>,
     tag: ClanTag,
     requiredVersusTrophies: usize,
     isWarLogPublic: bool,
@@ -95,7 +141,7 @@ pub struct ClanMember {
     league: serde_json::Value,
     builderBaseLeague: serde_json::Value,
     versusTrophies: usize,
-    tag: PlayerTag,
+    pub tag: PlayerTag,
     name: String,
     role: serde_json::Value,
     expLevel: usize,
@@ -255,7 +301,7 @@ impl Client {
         resp.json().await.map_err(|e| LoadError::Deserialize(e))
     }
 
-    pub async fn player_info(&self, player: &PlayerTag) -> Result<serde_json::Value, LoadError> {
+    pub async fn player_info(&self, player: &PlayerTag) -> Result<PlayerInfo, LoadError> {
         let resp = self
             .client
             .get(format!(

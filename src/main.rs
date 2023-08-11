@@ -112,6 +112,35 @@ async fn main() {
 
                 gold_pass_bot::update_cwl(&client, &tag, &mut storage).await;
 
+                match client.clan_info(&tag).await {
+                    Ok(clan) => {
+                        for member in clan.memberList {
+                            let player_tag = member.tag;
+
+                            let player_info = match client.player_info(&player_tag).await {
+                                Ok(pi) => pi,
+                                Err(e) => {
+                                    tracing::error!("Loading Player Info: {:?}", e);
+                                    continue;
+                                }
+                            };
+
+                            for achievement in player_info.achievements {
+                                if achievement.name.eq_ignore_ascii_case("Games Champion") {
+                                    tracing::trace!(
+                                        "Player Total Clan Games Score: {} -> {}",
+                                        player_info.name,
+                                        achievement.value
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Loading Clan Information: {:?}", e);
+                    }
+                };
+
                 match client.captial_raid_seasons(&tag).await {
                     Ok(raid_res) => {
                         for raid in raid_res.items {
