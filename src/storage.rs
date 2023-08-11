@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     path::Path,
 };
 
@@ -77,9 +77,9 @@ pub struct ClanStorage {
     /// All the CWL related Stats
     pub cwl: CwlStats,
     /// All the War related Stats
-    pub wars: HashMap<Time, WarStats>,
+    pub wars: BTreeMap<Time, WarStats>,
     pub games: HashMap<PlayerTag, PlayerGamesStats>,
-    pub raid_weekend: HashMap<Time, RaidWeekendStats>,
+    pub raid_weekend: BTreeMap<Time, RaidWeekendStats>,
     pub player_names: HashMap<PlayerTag, String>,
 }
 
