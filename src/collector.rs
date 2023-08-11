@@ -1,10 +1,10 @@
-use std::{borrow::Cow, collections::HashMap, fs::OpenOptions};
+use std::{borrow::Cow, collections::HashMap};
 
 use serde::Deserialize;
 
 use crate::{
-    ClanStorage, ClanTag, CwlWarStats, MemberWarStats, PlayerTag, Season, Storage, WarAttack,
-    WarStats, WarTag,
+    ClanStorage, ClanTag, CwlWarStats, MemberWarStats, PlayerGamesStats, PlayerTag, Season,
+    Storage, WarAttack, WarStats, WarTag,
 };
 
 mod api;
@@ -284,7 +284,7 @@ impl Client {
         let resp = self
             .client
             .get(format!(
-                "https://api.clashofclans.com/v1/clans/%23{}/capitalraidseasons",
+                "https://api.clashofclans.com/v1/clans/%23{}/capitalraidseasons?limit=5",
                 clan.0.as_str().strip_prefix("#").unwrap_or(clan.0.as_str())
             ))
             .bearer_auth(&self.api_key)
@@ -469,4 +469,55 @@ pub async fn update_war(client: &Client, clan_tag: &ClanTag, storage: &mut Stora
             .collect(),
     };
     clan_season_stats.wars.insert(start_time, war_stats);
+}
+
+#[tracing::instrument(skip(client, storage))]
+pub async fn update_clan_games(client: &Client, clan_tag: &ClanTag, storage: &mut Storage) {
+    let clan = match client.clan_info(&clan_tag).await {
+        Ok(clan) => clan,
+        Err(e) => {
+            tracing::error!("Loading Clan Information: {:?}", e);
+            return;
+        }
+    };
+
+    let season = Season::current();
+
+    let clan_stats = storage.get_mut(clan_tag, &season).unwrap();
+
+    for member in clan.memberList {
+        let player_tag = member.tag;
+
+        let player_info = match client.player_info(&player_tag).await {
+            Ok(pi) => pi,
+            Err(e) => {
+                tracing::error!("Loading Player Info: {:?}", e);
+                continue;
+            }
+        };
+
+        for achievement in player_info.achievements {
+            if achievement.name.eq_ignore_ascii_case("Games Champion") {
+                tracing::trace!(
+                    "Player Total Clan Games Score: {} -> {}",
+                    player_info.name,
+                    achievement.value
+                );
+
+                let player_entry =
+                    clan_stats
+                        .games
+                        .entry(player_tag.clone())
+                        .or_insert(PlayerGamesStats {
+                            start_score: Some(achievement.value),
+                            end_score: achievement.value,
+                        });
+                if player_entry.start_score.is_none() {
+                    player_entry.start_score = Some(achievement.value);
+                }
+
+                player_entry.end_score = achievement.value;
+            }
+        }
+    }
 }

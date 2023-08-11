@@ -85,7 +85,8 @@ pub struct ClanStorage {
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct PlayerGamesStats {
-    score: usize,
+    pub start_score: Option<usize>,
+    pub end_score: usize,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
@@ -238,7 +239,11 @@ impl ClanStorage {
                 })
                 .sum();
 
-            let games_score = self.games.get(&ptag).map(|s| s.score).unwrap_or(0);
+            let games_score = self
+                .games
+                .get(&ptag)
+                .map(|s| s.end_score - s.start_score.unwrap_or(s.end_score))
+                .unwrap_or(0);
 
             (
                 ptag,
