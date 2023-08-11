@@ -6,9 +6,7 @@ use std::env;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use gold_pass_bot::{
-    ClanTag, CurrentWarState, ExcelStats, RaidMember, RaidWeekendStats, Season, Storage,
-};
+use gold_pass_bot::{ClanTag, ExcelStats, RaidMember, RaidWeekendStats, Season, Storage};
 use serenity::async_trait;
 use serenity::framework::standard::macros::{command, group};
 use serenity::framework::standard::{CommandResult, StandardFramework};
@@ -112,7 +110,7 @@ async fn main() {
 
                 gold_pass_bot::update_war(&client, &tag, &mut storage).await;
 
-                // gold_pass_bot::update_cwl(&client, &tag, &mut storage).await;
+                gold_pass_bot::update_cwl(&client, &tag, &mut storage).await;
 
                 match client.captial_raid_seasons(&tag).await {
                     Ok(raid_res) => {

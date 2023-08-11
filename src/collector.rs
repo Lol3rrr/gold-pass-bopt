@@ -1,7 +1,6 @@
 use std::{borrow::Cow, collections::HashMap};
 
 use serde::Deserialize;
-use serenity::model::prelude::Member;
 
 use crate::{
     ClanStorage, ClanTag, CwlWarStats, MemberWarStats, PlayerTag, Season, Storage, WarAttack,
@@ -241,6 +240,31 @@ impl Client {
             .get(format!(
                 "https://api.clashofclans.com/v1/clans/%23{}/capitalraidseasons",
                 clan.0.as_str().strip_prefix("#").unwrap_or(clan.0.as_str())
+            ))
+            .bearer_auth(&self.api_key)
+            .send()
+            .await;
+
+        let resp = match resp {
+            Ok(r) => r,
+            Err(e) => {
+                return Err(LoadError::ReqwestError(e));
+            }
+        };
+
+        resp.json().await.map_err(|e| LoadError::Deserialize(e))
+    }
+
+    pub async fn player_info(&self, player: &PlayerTag) -> Result<serde_json::Value, LoadError> {
+        let resp = self
+            .client
+            .get(format!(
+                "https://api.clashofclans.com/v1/players/%23{}",
+                player
+                    .0
+                    .as_str()
+                    .strip_prefix("#")
+                    .unwrap_or(player.0.as_str())
             ))
             .bearer_auth(&self.api_key)
             .send()
