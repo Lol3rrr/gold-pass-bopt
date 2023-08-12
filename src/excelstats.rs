@@ -56,9 +56,13 @@ impl ExcelStats {
 
             // TODO
             // Make sure this is actually sorted and not a random order
-            for (w_index, w_stats) in stats.wars.iter().enumerate() {
+            for (w_index, (_, w_stats)) in stats.wars.iter().enumerate() {
                 // TODO
-                let stars = 0;
+                let stars = w_stats
+                    .members
+                    .get(&tag)
+                    .map(|w| w.attacks.iter().map(|a| a.stars).sum())
+                    .unwrap_or(0);
 
                 worksheet.write_number(row, (w_index + 8) as u16, stars as f64);
             }
