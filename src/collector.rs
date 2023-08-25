@@ -104,7 +104,7 @@ pub struct WarLogEntry {
 
 #[derive(Debug, Deserialize)]
 pub struct ClanInfo {
-    warLeague: serde_json::Value,
+    warLeague: Option<serde_json::Value>,
     capitalLeague: serde_json::Value,
     pub memberList: Vec<ClanMember>,
     tag: ClanTag,
@@ -329,7 +329,13 @@ impl Client {
 
 #[tracing::instrument(skip(client, clan_season_stats))]
 pub async fn update_names(client: &Client, clan: &ClanTag, clan_season_stats: &mut ClanStorage) {
-    let info = client.clan_info(clan).await.unwrap();
+    let info = match client.clan_info(clan).await {
+        Ok(i) => i,
+        Err(e) => {
+            tracing::error!("Failed to load Clan Information {:?}", e);
+            return;
+        }
+    };
 
     clan_season_stats.player_names.clear();
     for member in info.memberList {
