@@ -287,24 +287,30 @@ async fn export(ctx: &Context, msg: &Message) -> CommandResult {
 
     let alfie_tag = ClanTag("#2L99VLJ9P".to_string());
 
-    let season = Season::current();
-    tracing::trace!("Displaying stats for season: {:?}", season);
+    let current_season = Season::current();
+    let last_season = current_season.previous();
 
-    let clan_stats = stats.get(&alfie_tag, &season).expect("");
+    tracing::trace!(
+        "Displaying stats for seasons: {:?}, {:?}",
+        current_season,
+        last_season
+    );
 
-    let mut excel_book = ExcelStats::new().populate_workbook(clan_stats);
-    let content = excel_book.save_to_buffer().unwrap();
+    let files = [current_season, last_season].map(|season| {
+        let clan_stats = stats.get(&alfie_tag, &season).expect("");
+
+        let mut excel_book = ExcelStats::new().populate_workbook(clan_stats);
+        let content = excel_book.save_to_buffer().unwrap();
+
+        AttachmentType::Bytes {
+            data: Cow::Owned(content),
+            filename: format!("Tracker - {}-{}.xlsx", season.month, season.year),
+        }
+    });
 
     if let Err(e) = msg
         .channel_id
-        .send_files(
-            &ctx.http,
-            [AttachmentType::Bytes {
-                data: Cow::Borrowed(&content),
-                filename: "Tracker.xlsx".to_owned(),
-            }],
-            |m| m.content("Populated Spreadsheet"),
-        )
+        .send_files(&ctx.http, files, |m| m.content("Populated Spreadsheet"))
         .await
     {
         tracing::error!("Sending Excel Stats: {:?}", e);

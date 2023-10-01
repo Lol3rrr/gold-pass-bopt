@@ -69,6 +69,16 @@ impl Season {
             month: now.month() as usize,
         }
     }
+
+    pub fn previous(&self) -> Self {
+        let mut year = self.year;
+        let mut month = self.month - 1;
+        if month < 1 {
+            year -= 1;
+            month = 12;
+        }
+        Self { year, month }
+    }
 }
 
 /// All the Stats for a single Clan
