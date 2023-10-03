@@ -74,6 +74,12 @@ impl ExcelStats {
 
                 worksheet.write_number(row, (r_index + 8 + stats.wars.len()) as u16, loot as f64);
             }
+
+            let score = (summary.war_stars as f64 / 66.0) * 100.0
+                + (summary.cwl_stars as f64 / 21.0) * 100.0
+                + (summary.raid_loot as f64 / 120000.0) * 100.0
+                + (summary.games_score as f64 / 5000.0) * 100.0;
+            worksheet.write_number(row, (8 + stats.wars.len() + 4) as u16, score);
         }
 
         workbook
