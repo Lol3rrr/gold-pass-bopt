@@ -13,20 +13,23 @@ impl ExcelStats {
 
         worksheet.set_name("Gold-Pass Tracking").unwrap();
 
-        worksheet.write_string(0, 0, "Name");
+        let mut column_index = (0..).into_iter();
+
+        worksheet.write_string(0, column_index.next().unwrap(), "Name");
         for idx in 1..8 {
-            worksheet.write_string(0, idx, format!("CWL {}", idx));
+            worksheet.write_string(0, column_index.next().unwrap(), format!("CWL {}", idx));
         }
+        worksheet.write_string(0, column_index.next().unwrap(), "CWL Score");
         for idx in stats.wars.iter().enumerate().map(|(i, _)| i) {
-            worksheet.write_string(0, idx as u16 + 8, format!("War {}", idx));
+            worksheet.write_string(0, column_index.next().unwrap(), format!("War {}", idx + 1));
         }
-        for idx in 0..4 {
-            worksheet.write_string(
-                0,
-                idx + 8 + stats.wars.len() as u16,
-                format!("Raid {}", idx),
-            );
+        worksheet.write_string(0, column_index.next().unwrap(), "War Score");
+        for idx in stats.raid_weekend.iter().enumerate().map(|(i, _)| i) {
+            worksheet.write_string(0, column_index.next().unwrap(), format!("Raid {}", idx + 1));
         }
+        worksheet.write_string(0, column_index.next().unwrap(), "Raid Score");
+
+        worksheet.write_string(0, column_index.next().unwrap(), "Total Score");
 
         let mut summaries: Vec<_> = stats
             .players_summary()
@@ -39,7 +42,11 @@ impl ExcelStats {
         {
             let row = row as u32;
 
-            worksheet.write_string(row, 0, name).unwrap();
+            let mut column_index = (0..).into_iter();
+
+            worksheet
+                .write_string(row, column_index.next().unwrap(), name)
+                .unwrap();
 
             for w_index in 0..7 {
                 let stars = match stats.cwl.wars.get(w_index) {
@@ -51,8 +58,13 @@ impl ExcelStats {
                     None => 0,
                 };
 
-                worksheet.write_number(row, (w_index + 1) as u16, stars as f64);
+                worksheet.write_number(row, column_index.next().unwrap(), stars as f64);
             }
+            worksheet.write_number(
+                row,
+                column_index.next().unwrap(),
+                (summary.cwl_stars as f64 / 21.0) * 100.0,
+            );
 
             // TODO
             // Make sure this is actually sorted and not a random order
@@ -64,22 +76,32 @@ impl ExcelStats {
                     .map(|w| w.attacks.iter().map(|a| a.stars).sum())
                     .unwrap_or(0);
 
-                worksheet.write_number(row, (w_index + 8) as u16, stars as f64);
+                worksheet.write_number(row, column_index.next().unwrap(), stars as f64);
             }
+            worksheet.write_number(
+                row,
+                column_index.next().unwrap(),
+                (summary.war_stars as f64 / 66.0) * 100.0,
+            );
 
             // TODO
             // Make sure this is actually sorted by time
             for (r_index, (d, raid)) in stats.raid_weekend.iter().enumerate() {
                 let loot = raid.members.get(&tag).map(|m| m.looted).unwrap_or(0);
 
-                worksheet.write_number(row, (r_index + 8 + stats.wars.len()) as u16, loot as f64);
+                worksheet.write_number(row, column_index.next().unwrap(), loot as f64);
             }
+            worksheet.write_number(
+                row,
+                column_index.next().unwrap(),
+                (summary.raid_loot as f64 / 120000.0) * 100.0,
+            );
 
             let score = (summary.war_stars as f64 / 66.0) * 100.0
                 + (summary.cwl_stars as f64 / 21.0) * 100.0
                 + (summary.raid_loot as f64 / 120000.0) * 100.0
                 + (summary.games_score as f64 / 5000.0) * 100.0;
-            worksheet.write_number(row, (8 + stats.wars.len() + 4) as u16, score);
+            worksheet.write_number(row, column_index.next().unwrap(), score);
         }
 
         workbook
