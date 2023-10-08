@@ -253,7 +253,7 @@ impl Client {
             }
         };
 
-        resp.json().await.map_err(|e| panic!("{:?}", e))
+        resp.json().await.map_err(|e| LoadError::Deserialize(e))
     }
 
     pub async fn clan_info(&self, clan: &ClanTag) -> Result<ClanInfo, LoadError> {
