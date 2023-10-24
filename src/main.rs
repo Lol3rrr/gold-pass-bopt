@@ -6,7 +6,9 @@ use std::env;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use gold_pass_bot::{ClanTag, ExcelStats, RaidMember, RaidWeekendStats, Season, Storage};
+use gold_pass_bot::{
+    ClanTag, ExcelStats, FileStorage, RaidMember, RaidWeekendStats, Season, Storage,
+};
 use serenity::async_trait;
 use serenity::framework::standard::macros::{command, group};
 use serenity::framework::standard::{CommandResult, StandardFramework};
@@ -63,7 +65,7 @@ async fn main() {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    let storage = Storage::load(&store_path)
+    let storage = Storage::load(&mut FileStorage::new(&store_path))
         .await
         .unwrap_or_else(|_| Storage::empty());
     let shared_storage = Arc::new(ArcSwap::new(Arc::new((storage.clone(), elapsed))));
@@ -167,7 +169,9 @@ async fn main() {
                 .as_secs();
             shared_storage.swap(Arc::new((storage.clone(), elapsed)));
 
-            if let Err(e) = storage.save(&store_path).await {
+            let mut file_storage = FileStorage::new(&store_path);
+
+            if let Err(e) = storage.save(&mut file_storage).await {
                 tracing::error!("Saving Storage: {:?}", e);
             }
 
@@ -283,7 +287,7 @@ async fn export(ctx: &Context, msg: &Message) -> CommandResult {
     let storage: &Arc<ArcSwap<_>> = guard.get::<ClanStates>().unwrap();
 
     let stats_guard = storage.load();
-    let (stats, timestamp) = stats_guard.as_ref();
+    let (stats, _timestamp) = stats_guard.as_ref(); // TODO
 
     let alfie_tag = ClanTag("#2L99VLJ9P".to_string());
 

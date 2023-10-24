@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{ClanTag, ClanWarLeagueSeason, PlayerTag, Time};
 
+mod files;
+pub use files::FileStorage;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Storage {
     clans: HashMap<ClanTag, HashMap<Season, ClanStorage>>,
@@ -167,36 +170,21 @@ impl Storage {
         self.clans.get(tag).and_then(|s| s.get(season))
     }
 
-    pub async fn load<P>(path: P) -> Result<Self, ()>
-    where
-        P: AsRef<Path>,
-    {
-        let content = tokio::fs::read(path).await.map_err(|e| ())?;
+    pub async fn load(store: &mut FileStorage) -> Result<Self, ()> {
+        let content = store.read().await.map_err(|e| ())?;
         serde_json::from_slice(&content).map_err(|e| ())
     }
 
-    pub async fn save<P>(&self, path: P) -> Result<(), ()>
-    where
-        P: AsRef<Path>,
-    {
+    pub async fn save(&self, store: &mut FileStorage) -> Result<(), ()> {
         let content = serde_json::to_vec(&self).map_err(|e| {
             tracing::error!("Serializing {:?}", e);
             ()
         })?;
 
-        let path = path.as_ref();
-        if !path.exists() {
-            tokio::fs::File::create(path).await.map_err(|e| {
-                tracing::error!("Creating file {:?}", e);
-                ()
-            })?;
-        }
-        tokio::fs::write(path, content).await.map_err(|e| {
-            tracing::error!("Writing file {:?}", e);
+        store.write(&content).await.map_err(|e| {
+            tracing::error!("Storing {:?}", e);
             ()
-        })?;
-
-        Ok(())
+        })
     }
 }
 
