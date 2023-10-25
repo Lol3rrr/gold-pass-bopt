@@ -1,4 +1,6 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, pin::Pin};
+
+use crate::StorageBackend;
 
 pub struct FileStorage {
     path: PathBuf,
@@ -22,5 +24,31 @@ impl FileStorage {
         }
 
         tokio::fs::write(&self.path, content).await
+    }
+}
+
+impl StorageBackend for FileStorage {
+    fn write(
+        &mut self,
+        content: Vec<u8>,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<(), ()>> + Send + Sync + 'static>> {
+        let path = self.path.clone();
+
+        Box::pin(async move {
+            if path.exists() {
+                tokio::fs::File::create(&path).await.map_err(|e| ())?;
+            }
+
+            tokio::fs::write(&path, &content).await.map_err(|e| ())
+        })
+    }
+
+    fn load(
+        &mut self,
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<Vec<u8>, ()>> + Send + Sync + 'static>>
+    {
+        let path = self.path.clone();
+
+        Box::pin(async move { tokio::fs::read(&path).await.map_err(|e| ()) })
     }
 }

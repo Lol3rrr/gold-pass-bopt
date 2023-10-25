@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    path::Path,
+    future::Future,
+    pin::Pin,
 };
 
 use chrono::Datelike;
@@ -10,6 +11,16 @@ use crate::{ClanTag, ClanWarLeagueSeason, PlayerTag, Time};
 
 mod files;
 pub use files::FileStorage;
+
+pub trait StorageBackend: Send {
+    fn write(
+        &mut self,
+        content: Vec<u8>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ()>> + Send + Sync + 'static>>;
+    fn load(
+        &mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, ()>> + Send + Sync + 'static>>;
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Storage {
@@ -170,18 +181,18 @@ impl Storage {
         self.clans.get(tag).and_then(|s| s.get(season))
     }
 
-    pub async fn load(store: &mut FileStorage) -> Result<Self, ()> {
-        let content = store.read().await.map_err(|e| ())?;
+    pub async fn load(store: &mut dyn StorageBackend) -> Result<Self, ()> {
+        let content = store.load().await.map_err(|e| ())?;
         serde_json::from_slice(&content).map_err(|e| ())
     }
 
-    pub async fn save(&self, store: &mut FileStorage) -> Result<(), ()> {
+    pub async fn save(&self, store: &mut dyn StorageBackend) -> Result<(), ()> {
         let content = serde_json::to_vec(&self).map_err(|e| {
             tracing::error!("Serializing {:?}", e);
             ()
         })?;
 
-        store.write(&content).await.map_err(|e| {
+        store.write(content).await.map_err(|e| {
             tracing::error!("Storing {:?}", e);
             ()
         })

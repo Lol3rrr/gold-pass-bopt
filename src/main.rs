@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use gold_pass_bot::{
-    ClanTag, ExcelStats, FileStorage, RaidMember, RaidWeekendStats, Season, Storage,
+    ClanTag, ExcelStats, FileStorage, RaidMember, RaidWeekendStats, Season, Storage, StorageBackend,
 };
 use serenity::async_trait;
 use serenity::framework::standard::macros::{command, group};
@@ -61,11 +61,14 @@ async fn main() {
         .await
         .expect("Error creating client");
 
+    let mut storage_backend: Box<dyn StorageBackend> =
+        Box::new(FileStorage::new(store_path.clone()));
+
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    let storage = Storage::load(&mut FileStorage::new(&store_path))
+    let storage = Storage::load(storage_backend.as_mut())
         .await
         .unwrap_or_else(|_| Storage::empty());
     let shared_storage = Arc::new(ArcSwap::new(Arc::new((storage.clone(), elapsed))));
@@ -169,9 +172,7 @@ async fn main() {
                 .as_secs();
             shared_storage.swap(Arc::new((storage.clone(), elapsed)));
 
-            let mut file_storage = FileStorage::new(&store_path);
-
-            if let Err(e) = storage.save(&mut file_storage).await {
+            if let Err(e) = storage.save(storage_backend.as_mut()).await {
                 tracing::error!("Saving Storage: {:?}", e);
             }
 
