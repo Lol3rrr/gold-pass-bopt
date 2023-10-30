@@ -7,7 +7,8 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use gold_pass_bot::{
-    ClanTag, ExcelStats, FileStorage, RaidMember, RaidWeekendStats, Season, Storage, StorageBackend,
+    ClanTag, ExcelStats, FileStorage, RaidMember, RaidWeekendStats, Replicated, S3Storage, Season,
+    Storage, StorageBackend,
 };
 use serenity::async_trait;
 use serenity::framework::standard::macros::{command, group};
@@ -43,6 +44,10 @@ async fn main() {
     let store_path = std::env::var("STORE_PATH").unwrap_or_else(|_| "data.json".to_string());
     let api_path = std::env::var("API_PATH").unwrap_or_else(|_| "api.key".to_string());
 
+    let s3_bucket = std::env::var("S3_BUCKET").unwrap();
+    let s3_access_key = std::env::var("S3_ACCESS_KEY").unwrap();
+    let s3_secret_key = std::env::var("S3_SECRET_KEY").unwrap();
+
     #[cfg(not(debug_assertions))]
     let prefix = "!";
     #[cfg(debug_assertions)]
@@ -61,8 +66,27 @@ async fn main() {
         .await
         .expect("Error creating client");
 
-    let mut storage_backend: Box<dyn StorageBackend> =
-        Box::new(FileStorage::new(store_path.clone()));
+    let mut storage_backend: Box<dyn StorageBackend> = Box::new(Replicated::new(
+        FileStorage::new(store_path.clone()),
+        S3Storage::new(
+            s3::Bucket::new(
+                &s3_bucket,
+                s3::Region::Custom {
+                    region: "default".to_string(),
+                    endpoint: "https://ceph-s3.service.aachen.dc.consul:7480".to_string(),
+                },
+                s3::creds::Credentials::new(
+                    Some(&s3_access_key),
+                    Some(&s3_secret_key),
+                    None,
+                    None,
+                    None,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        ),
+    ));
 
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -12,14 +12,18 @@ use crate::{ClanTag, ClanWarLeagueSeason, PlayerTag, Time};
 mod files;
 pub use files::FileStorage;
 
+mod s3;
+pub use s3::S3Storage;
+
+mod replicated;
+pub use replicated::Replicated;
+
 pub trait StorageBackend: Send {
     fn write(
         &mut self,
         content: Vec<u8>,
-    ) -> Pin<Box<dyn Future<Output = Result<(), ()>> + Send + Sync + 'static>>;
-    fn load(
-        &mut self,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, ()>> + Send + Sync + 'static>>;
+    ) -> Pin<Box<dyn Future<Output = Result<(), ()>> + Send + 'static>>;
+    fn load(&mut self) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, ()>> + Send + 'static>>;
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

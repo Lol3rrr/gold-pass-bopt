@@ -31,7 +31,7 @@ impl StorageBackend for FileStorage {
     fn write(
         &mut self,
         content: Vec<u8>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<(), ()>> + Send + Sync + 'static>> {
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<(), ()>> + Send + 'static>> {
         let path = self.path.clone();
 
         Box::pin(async move {
@@ -45,8 +45,7 @@ impl StorageBackend for FileStorage {
 
     fn load(
         &mut self,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<Vec<u8>, ()>> + Send + Sync + 'static>>
-    {
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<Vec<u8>, ()>> + Send + 'static>> {
         let path = self.path.clone();
 
         Box::pin(async move { tokio::fs::read(&path).await.map_err(|e| ()) })
