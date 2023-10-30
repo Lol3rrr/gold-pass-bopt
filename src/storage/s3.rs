@@ -9,7 +9,7 @@ impl S3Storage {
     pub fn new(bucket: s3::Bucket) -> Self {
         Self {
             bucket,
-            filename: "/storage.json".to_string(),
+            filename: "storage.json".to_string(),
         }
     }
 }
