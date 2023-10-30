@@ -35,11 +35,17 @@ impl StorageBackend for FileStorage {
         let path = self.path.clone();
 
         Box::pin(async move {
-            if path.exists() {
-                tokio::fs::File::create(&path).await.map_err(|e| ())?;
+            if !path.exists() {
+                tokio::fs::File::create(&path).await.map_err(|e| {
+                    tracing::error!("Creating file {:?}", e);
+                    ()
+                })?;
             }
 
-            tokio::fs::write(&path, &content).await.map_err(|e| ())
+            tokio::fs::write(&path, &content).await.map_err(|e| {
+                tracing::error!("Writing File {:?}", e);
+                ()
+            })
         })
     }
 
