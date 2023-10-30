@@ -15,6 +15,7 @@ impl S3Storage {
 }
 
 impl StorageBackend for S3Storage {
+    #[tracing::instrument(skip(self, content))]
     fn write(
         &mut self,
         content: Vec<u8>,
@@ -26,11 +27,17 @@ impl StorageBackend for S3Storage {
             let filename = filename;
             let content = content;
 
+            tracing::trace!("Storing to S3 Bucket");
+
             let res = bucket.put_object(&filename, &content);
 
             match res.await {
                 Ok(_) => Ok(()),
-                Err(e) => Err(()),
+                Err(e) => {
+                    tracing::error!("{:?}", e);
+
+                    Err(())
+                }
             }
         })
     }
