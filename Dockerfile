@@ -36,6 +36,8 @@ WORKDIR /server
 COPY --from=builder /server/gold-pass-bot/target/x86_64-unknown-linux-musl/release/gold-pass-bot ./
 
 # Use an unprivileged user.
-USER goldpass:goldpass
+# TODO
+# This does not work currently
+# USER goldpass:goldpass
 
 CMD ["/server/gold-pass-bot"]
