@@ -6,7 +6,7 @@ pub struct S3Storage {
 }
 
 impl S3Storage {
-    pub fn new(bucket: s3::Bucket) -> Self {
+    pub fn new(mut bucket: s3::Bucket) -> Self {
         Self {
             bucket,
             filename: "storage.json".to_string(),
@@ -29,7 +29,7 @@ impl StorageBackend for S3Storage {
 
             tracing::trace!("Storing to S3 Bucket");
 
-            let res = bucket.put_object(&filename, &content);
+            let res = bucket.put_object_with_content_type(&filename, &content, "application/json");
 
             match res.await {
                 Ok(_) => Ok(()),
