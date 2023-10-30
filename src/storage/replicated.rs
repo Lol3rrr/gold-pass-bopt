@@ -27,7 +27,7 @@ where
             let pres = pfut.await;
             let sres = sfut.await;
 
-            pres.or(sres)
+            pres.ok().or(sres.ok()).ok_or(())
         })
     }
 
