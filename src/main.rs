@@ -47,6 +47,7 @@ async fn main() {
     let s3_bucket = std::env::var("S3_BUCKET").unwrap();
     let s3_access_key = std::env::var("S3_ACCESS_KEY").unwrap();
     let s3_secret_key = std::env::var("S3_SECRET_KEY").unwrap();
+    let s3_endpoint = std::env::var("S3_ENDPOINT").unwrap();
 
     #[cfg(not(debug_assertions))]
     let prefix = "!";
@@ -73,7 +74,7 @@ async fn main() {
                 &s3_bucket,
                 s3::Region::Custom {
                     region: "default".to_string(),
-                    endpoint: "https://ceph-s3.service.aachen.dc.consul:7480".to_string(),
+                    endpoint: s3_endpoint.to_string(),
                 },
                 s3::creds::Credentials::new(
                     Some(&s3_access_key),
