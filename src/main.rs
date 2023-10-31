@@ -69,8 +69,8 @@ async fn main() {
 
     let mut storage_backend: Box<dyn StorageBackend> = Box::new(Replicated::new(
         FileStorage::new(store_path.clone()),
-        S3Storage::new({
-            let mut tmp = s3::Bucket::new(
+        S3Storage::new(
+            s3::Bucket::new(
                 &s3_bucket,
                 s3::Region::Custom {
                     region: "default".to_string(),
@@ -85,10 +85,9 @@ async fn main() {
                 )
                 .unwrap(),
             )
-            .unwrap();
-            tmp.set_path_style();
-            tmp
-        }),
+            .unwrap()
+            .with_path_style(),
+        ),
     ));
 
     let elapsed = SystemTime::now()

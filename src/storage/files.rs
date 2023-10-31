@@ -28,6 +28,7 @@ impl FileStorage {
 }
 
 impl StorageBackend for FileStorage {
+    #[tracing::instrument(skip(self, content))]
     fn write(
         &mut self,
         content: Vec<u8>,
@@ -35,6 +36,8 @@ impl StorageBackend for FileStorage {
         let path = self.path.clone();
 
         Box::pin(async move {
+            tracing::trace!("Storing to File");
+
             if !path.exists() {
                 tokio::fs::File::create(&path).await.map_err(|e| {
                     tracing::error!("Creating file {:?}", e);

@@ -16,6 +16,7 @@ where
     P: StorageBackend,
     S: StorageBackend,
 {
+    #[tracing::instrument(skip(self, content))]
     fn write(
         &mut self,
         content: Vec<u8>,
@@ -24,6 +25,8 @@ where
         let sfut = self.secondary.write(content);
 
         Box::pin(async move {
+            tracing::trace!("Storing Replicated");
+
             let pres = pfut.await;
             let sres = sfut.await;
 
