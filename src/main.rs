@@ -39,15 +39,18 @@ async fn main() {
     tracing::subscriber::set_global_default(layers).unwrap();
 
     let args = clap::Command::new("Gold-Pass-Bot")
-        .arg(
-            clap::Arg::new("storage")
-                .long("storage")
-                .value_names(["storage-target"]),
+        .subcommand(
+            clap::Command::new("bot").arg(
+                clap::Arg::new("storage")
+                    .long("storage")
+                    .value_names(["storage-target"]),
+            ),
         )
         .get_matches();
-    tracing::debug!("Args: {:#?}", args);
 
     let mut storage_backend = args
+        .subcommand_matches("bot")
+        .unwrap()
         .get_one::<String>("storage")
         .map(|arg: &String| gold_pass_bot::parse_storage(&arg))
         .unwrap()
