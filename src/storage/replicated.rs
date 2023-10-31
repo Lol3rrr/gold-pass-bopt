@@ -1,21 +1,17 @@
 use crate::StorageBackend;
 
-pub struct Replicated<P, S> {
-    primary: P,
-    secondary: S,
+pub struct Replicated {
+    primary: Box<dyn StorageBackend>,
+    secondary: Box<dyn StorageBackend>,
 }
 
-impl<P, S> Replicated<P, S> {
-    pub fn new(primary: P, secondary: S) -> Self {
+impl Replicated {
+    pub fn new(primary: Box<dyn StorageBackend>, secondary: Box<dyn StorageBackend>) -> Self {
         Self { primary, secondary }
     }
 }
 
-impl<P, S> StorageBackend for Replicated<P, S>
-where
-    P: StorageBackend,
-    S: StorageBackend,
-{
+impl StorageBackend for Replicated {
     #[tracing::instrument(skip(self, content))]
     fn write(
         &mut self,

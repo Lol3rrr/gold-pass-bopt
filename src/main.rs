@@ -6,10 +6,7 @@ use std::env;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use gold_pass_bot::{
-    ClanTag, ExcelStats, FileStorage, RaidMember, RaidWeekendStats, Replicated, S3Storage, Season,
-    Storage, StorageBackend,
-};
+use gold_pass_bot::{ClanTag, ExcelStats, RaidMember, RaidWeekendStats, Season, Storage};
 use serenity::async_trait;
 use serenity::framework::standard::macros::{command, group};
 use serenity::framework::standard::{CommandResult, StandardFramework};
@@ -41,13 +38,22 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer());
     tracing::subscriber::set_global_default(layers).unwrap();
 
-    let store_path = std::env::var("STORE_PATH").unwrap_or_else(|_| "data.json".to_string());
-    let api_path = std::env::var("API_PATH").unwrap_or_else(|_| "api.key".to_string());
+    let args = clap::Command::new("Gold-Pass-Bot")
+        .arg(
+            clap::Arg::new("storage")
+                .long("storage")
+                .value_names(["storage-target"]),
+        )
+        .get_matches();
+    tracing::debug!("Args: {:#?}", args);
 
-    let s3_bucket = std::env::var("S3_BUCKET").unwrap();
-    let s3_access_key = std::env::var("S3_ACCESS_KEY").unwrap();
-    let s3_secret_key = std::env::var("S3_SECRET_KEY").unwrap();
-    let s3_endpoint = std::env::var("S3_ENDPOINT").unwrap();
+    let mut storage_backend = args
+        .get_one::<String>("storage")
+        .map(|arg: &String| gold_pass_bot::parse_storage(&arg))
+        .unwrap()
+        .unwrap();
+
+    let api_path = std::env::var("API_PATH").unwrap_or_else(|_| "api.key".to_string());
 
     #[cfg(not(debug_assertions))]
     let prefix = "!";
@@ -66,29 +72,6 @@ async fn main() {
         .framework(framework)
         .await
         .expect("Error creating client");
-
-    let mut storage_backend: Box<dyn StorageBackend> = Box::new(Replicated::new(
-        FileStorage::new(store_path.clone()),
-        S3Storage::new(
-            s3::Bucket::new(
-                &s3_bucket,
-                s3::Region::Custom {
-                    region: "default".to_string(),
-                    endpoint: s3_endpoint.to_string(),
-                },
-                s3::creds::Credentials::new(
-                    Some(&s3_access_key),
-                    Some(&s3_secret_key),
-                    None,
-                    None,
-                    None,
-                )
-                .unwrap(),
-            )
-            .unwrap()
-            .with_path_style(),
-        ),
-    ));
 
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)

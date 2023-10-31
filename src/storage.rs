@@ -26,6 +26,22 @@ pub trait StorageBackend: Send {
     fn load(&mut self) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, ()>> + Send + 'static>>;
 }
 
+impl<S> StorageBackend for Box<S>
+where
+    S: StorageBackend,
+{
+    fn write(
+        &mut self,
+        content: Vec<u8>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ()>> + Send + 'static>> {
+        S::write(self.as_mut(), content)
+    }
+
+    fn load(&mut self) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, ()>> + Send + 'static>> {
+        S::load(self.as_mut())
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Storage {
     clans: HashMap<ClanTag, HashMap<Season, ClanStorage>>,
