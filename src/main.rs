@@ -6,10 +6,15 @@ use std::env;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use gold_pass_bot::{ClanTag, ExcelStats, RaidMember, RaidWeekendStats, Season, Storage};
+use awscreds::time::format_description::modifier::Padding;
+use awscreds::time::serde::timestamp;
+use gold_pass_bot::{
+    ClanTag, ExcelStats, PlayerSummary, RaidMember, RaidWeekendStats, Season, Storage,
+};
 use serenity::async_trait;
 use serenity::framework::standard::macros::{command, group};
 use serenity::framework::standard::{CommandResult, StandardFramework};
+use serenity::futures::io::LineWriter;
 use serenity::model::channel::Message;
 use serenity::model::prelude::AttachmentType;
 use serenity::prelude::*;
@@ -200,6 +205,67 @@ async fn main() {
     }
 }
 
+fn generate_batches(
+    player_count: usize,
+    header_padding_width: usize,
+    padding_width: usize,
+    summaries: BTreeMap<&String, PlayerSummary>,
+    timestamp: u64,
+) -> Vec<String> {
+    let mut summary_iter = summaries
+        .iter()
+        .map(|(name, sum)| {
+            format!(
+                "{:width$}|  {:2} |   {:2} | {:5} |    {:2}",
+                name,
+                sum.cwl_stars,
+                sum.war_stars,
+                sum.raid_loot,
+                sum.games_score,
+                width = padding_width
+            )
+        })
+        .peekable();
+    let line_width = format!(
+        "{:width$}|  {:2} |   {:2} | {:5} |    {:2}",
+        "",
+        0,
+        0,
+        0,
+        0,
+        width = padding_width
+    )
+    .len();
+
+    let players_per_line = 1800 / line_width;
+    (0..(player_count / players_per_line + 1))
+        .map(|batch| {
+            let summary: String = core::iter::once(format!(
+                "```Player Tag {:width$}| CWL | Wars | Raids | Games",
+                ' ',
+                width = header_padding_width
+            ))
+            .chain(core::iter::once(
+                core::iter::repeat('-')
+                    .take(40 + padding_width.saturating_sub(11))
+                    .collect(),
+            ))
+            .chain(summary_iter.by_ref().take(players_per_line))
+            .chain(core::iter::once("```".to_string()))
+            .intersperse("\n".to_string())
+            .collect();
+
+            format!(
+                "{}\nTimestamp: {}\n{}/{}",
+                summary,
+                timestamp,
+                batch + 1,
+                player_count / players_per_line + 1
+            )
+        })
+        .collect()
+}
+
 #[command]
 async fn stats(ctx: &Context, msg: &Message) -> CommandResult {
     let guard = ctx.data.read().await;
@@ -238,53 +304,32 @@ async fn stats(ctx: &Context, msg: &Message) -> CommandResult {
         .map(|(tag, v)| (clan_stats.player_names.get(&tag).unwrap(), v))
         .collect();
 
-    const PLAYER_PER_MESSAGE: usize = 35;
-    for batch in 0..(player_count / PLAYER_PER_MESSAGE + 1) {
+    if let Err(e) = msg
+        .channel_id
+        .send_message(&ctx.http, |m| {
+            m.content(format!("Stats for {:02}-{}", season.month, season.year))
+        })
+        .await
+    {
+        tracing::error!("Sending Message {:?}", e);
+    }
+
+    let batches = generate_batches(
+        player_count,
+        header_padding_width,
+        padding_width,
+        player_summaries,
+        *timestamp,
+    );
+
+    for (batch, content) in batches.into_iter().enumerate() {
         tracing::trace!("Sending Batch: {}", batch);
 
-        let summary: String = core::iter::once(format!(
-            "```Player Tag {:width$}| CWL | Wars | Raids | Games",
-            ' ',
-            width = header_padding_width
-        ))
-        .chain(core::iter::once(
-            core::iter::repeat('-')
-                .take(40 + padding_width.saturating_sub(11))
-                .collect(),
-        ))
-        .chain(
-            player_summaries
-                .iter()
-                .skip(batch * PLAYER_PER_MESSAGE)
-                .take(PLAYER_PER_MESSAGE)
-                .map(|(name, sum)| {
-                    format!(
-                        "{:width$}|  {:2} |   {:2} | {:5} |    {:2}",
-                        name,
-                        sum.cwl_stars,
-                        sum.war_stars,
-                        sum.raid_loot,
-                        sum.games_score,
-                        width = padding_width
-                    )
-                }),
-        )
-        .chain(core::iter::once("```".to_string()))
-        .intersperse("\n".to_string())
-        .collect();
-        tracing::trace!("Summary message length: {:?}", summary.len());
+        tracing::trace!("Summary message length: {:?}", content.len());
 
         if let Err(e) = msg
             .channel_id
-            .send_message(&ctx.http, |m| {
-                m.content(format!(
-                    "{}\nTimestamp: {}\n{}/{}",
-                    summary,
-                    timestamp,
-                    batch + 1,
-                    player_count / 25 + 1
-                ))
-            })
+            .send_message(&ctx.http, |m| m.content(content))
             .await
         {
             tracing::error!("Sending Response: {:?}", e);
