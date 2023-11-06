@@ -40,7 +40,7 @@ static REGISTRY: once_cell::sync::Lazy<prometheus::Registry> =
 async fn main() {
     let layers = tracing_subscriber::registry()
         .with(gold_pass_bot::TracingCrateFilter {})
-        .with(tracing_subscriber::fmt::layer());
+        .with(tracing_subscriber::fmt::layer().with_ansi(false));
     tracing::subscriber::set_global_default(layers).unwrap();
 
     let args = clap::Command::new("Gold-Pass-Bot")

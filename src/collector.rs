@@ -225,6 +225,10 @@ impl Client {
             }
         };
 
+        if !resp.status().is_success() {
+            return Err(LoadError::NotOkResponse(resp.status()));
+        }
+
         resp.json().await.map_err(|e| LoadError::Deserialize(e))
     }
 
@@ -253,6 +257,10 @@ impl Client {
             }
         };
 
+        if !resp.status().is_success() {
+            return Err(LoadError::NotOkResponse(resp.status()));
+        }
+
         resp.json().await.map_err(|e| LoadError::Deserialize(e))
     }
 
@@ -273,6 +281,10 @@ impl Client {
                 return Err(LoadError::ReqwestError(e));
             }
         };
+
+        if !resp.status().is_success() {
+            return Err(LoadError::NotOkResponse(resp.status()));
+        }
 
         resp.json().await.map_err(|e| LoadError::Deserialize(e))
     }
@@ -298,6 +310,10 @@ impl Client {
             }
         };
 
+        if !resp.status().is_success() {
+            return Err(LoadError::NotOkResponse(resp.status()));
+        }
+
         resp.json().await.map_err(|e| LoadError::Deserialize(e))
     }
 
@@ -322,6 +338,10 @@ impl Client {
                 return Err(LoadError::ReqwestError(e));
             }
         };
+
+        if !resp.status().is_success() {
+            return Err(LoadError::NotOkResponse(resp.status()));
+        }
 
         resp.json().await.map_err(|e| LoadError::Deserialize(e))
     }
