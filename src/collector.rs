@@ -328,12 +328,16 @@ impl Client {
 }
 
 #[tracing::instrument(skip(client, clan_season_stats))]
-pub async fn update_names(client: &Client, clan: &ClanTag, clan_season_stats: &mut ClanStorage) {
+pub async fn update_names(
+    client: &Client,
+    clan: &ClanTag,
+    clan_season_stats: &mut ClanStorage,
+) -> Result<(), ()> {
     let info = match client.clan_info(clan).await {
         Ok(i) => i,
         Err(e) => {
             tracing::error!("Failed to load Clan Information {:?}", e);
-            return;
+            return Err(());
         }
     };
 
@@ -343,15 +347,17 @@ pub async fn update_names(client: &Client, clan: &ClanTag, clan_season_stats: &m
             .player_names
             .insert(member.tag, member.name);
     }
+
+    Ok(())
 }
 
 #[tracing::instrument(skip(client, storage))]
-pub async fn update_cwl(client: &Client, clan: &ClanTag, storage: &mut Storage) {
+pub async fn update_cwl(client: &Client, clan: &ClanTag, storage: &mut Storage) -> Result<(), ()> {
     let w = match client.clan_war_league_group(clan).await {
         Ok(w) => w,
         Err(e) => {
             tracing::error!("Loading Clan War League Group: {:?}", e);
-            return;
+            return Err(());
         }
     };
 
@@ -410,21 +416,27 @@ pub async fn update_cwl(client: &Client, clan: &ClanTag, storage: &mut Storage) 
             }
         }
     }
+
+    Ok(())
 }
 
 #[tracing::instrument(skip(client, storage))]
-pub async fn update_war(client: &Client, clan_tag: &ClanTag, storage: &mut Storage) {
+pub async fn update_war(
+    client: &Client,
+    clan_tag: &ClanTag,
+    storage: &mut Storage,
+) -> Result<(), ()> {
     let war = match client.war().current(&clan_tag).await {
         Ok(w) => w,
         Err(e) => {
             tracing::error!("Error loading War: {:?}", e);
-            return;
+            return Err(());
         }
     };
 
     if !matches!(war.state, CurrentWarState::InWar) {
         tracing::info!("WAR: Not in War currently {:?}", war.state);
-        return;
+        return Ok(());
     }
 
     let clan = war.clan;
@@ -432,7 +444,7 @@ pub async fn update_war(client: &Client, clan_tag: &ClanTag, storage: &mut Stora
         Some(m) => m,
         None => {
             tracing::error!("Current War Clan is missing Members");
-            return;
+            return Err(());
         }
     };
 
@@ -440,7 +452,7 @@ pub async fn update_war(client: &Client, clan_tag: &ClanTag, storage: &mut Stora
         Some(t) => t,
         None => {
             tracing::error!("Current War missing Start Time");
-            return;
+            return Err(());
         }
     };
 
@@ -475,15 +487,21 @@ pub async fn update_war(client: &Client, clan_tag: &ClanTag, storage: &mut Stora
             .collect(),
     };
     clan_season_stats.wars.insert(start_time, war_stats);
+
+    Ok(())
 }
 
 #[tracing::instrument(skip(client, storage))]
-pub async fn update_clan_games(client: &Client, clan_tag: &ClanTag, storage: &mut Storage) {
+pub async fn update_clan_games(
+    client: &Client,
+    clan_tag: &ClanTag,
+    storage: &mut Storage,
+) -> Result<(), ()> {
     let clan = match client.clan_info(&clan_tag).await {
         Ok(clan) => clan,
         Err(e) => {
             tracing::error!("Loading Clan Information: {:?}", e);
-            return;
+            return Err(());
         }
     };
 
@@ -526,4 +544,6 @@ pub async fn update_clan_games(client: &Client, clan_tag: &ClanTag, storage: &mu
             }
         }
     }
+
+    Ok(())
 }

@@ -6,15 +6,12 @@ use std::env;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use awscreds::time::format_description::modifier::Padding;
-use awscreds::time::serde::timestamp;
 use gold_pass_bot::{
     ClanTag, ExcelStats, PlayerSummary, RaidMember, RaidWeekendStats, Season, Storage,
 };
 use serenity::async_trait;
 use serenity::framework::standard::macros::{command, group};
 use serenity::framework::standard::{CommandResult, StandardFramework};
-use serenity::futures::io::LineWriter;
 use serenity::model::channel::Message;
 use serenity::model::prelude::AttachmentType;
 use serenity::prelude::*;
@@ -35,6 +32,9 @@ impl TypeMapKey for ClanStates {
 
 #[async_trait]
 impl EventHandler for Handler {}
+
+static REGISTRY: once_cell::sync::Lazy<prometheus::Registry> =
+    once_cell::sync::Lazy::new(|| prometheus::Registry::new());
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -107,6 +107,14 @@ async fn main() {
         let mut storage = storage;
         storage.register_clan(ClanTag(alfie_tag.to_string()));
 
+        let error_counter =
+            prometheus::Counter::new("api_errors", "The Number of errors returned by the API")
+                .unwrap();
+
+        once_cell::sync::Lazy::force(&REGISTRY)
+            .register(Box::new(error_counter.clone()))
+            .unwrap();
+
         loop {
             let season = Season::current();
 
@@ -128,13 +136,23 @@ async fn main() {
                     }
                 };
 
-                gold_pass_bot::update_names(&client, &tag, clan_season_stats).await;
+                if let Err(e) = gold_pass_bot::update_names(&client, &tag, clan_season_stats).await
+                {
+                    error_counter.inc();
+                }
 
-                gold_pass_bot::update_war(&client, &tag, &mut storage).await;
+                if let Err(e) = gold_pass_bot::update_war(&client, &tag, &mut storage).await {
+                    error_counter.inc();
+                }
 
-                gold_pass_bot::update_cwl(&client, &tag, &mut storage).await;
+                if let Err(e) = gold_pass_bot::update_cwl(&client, &tag, &mut storage).await {
+                    error_counter.inc();
+                }
 
-                gold_pass_bot::update_clan_games(&client, &tag, &mut storage).await;
+                if let Err(e) = gold_pass_bot::update_clan_games(&client, &tag, &mut storage).await
+                {
+                    error_counter.inc();
+                }
 
                 match client.captial_raid_seasons(&tag).await {
                     Ok(raid_res) => {
@@ -176,6 +194,8 @@ async fn main() {
                         }
                     }
                     Err(e) => {
+                        error_counter.inc();
+
                         tracing::error!("Error loading Capital Raid Seasons: {:?}", e);
                     }
                 };
@@ -197,6 +217,15 @@ async fn main() {
 
             tokio::time::sleep(Duration::from_secs(90)).await;
         }
+    });
+
+    tokio::spawn(async move {
+        let app = axum::Router::new().route("/metrics", axum::routing::get(metrics));
+
+        axum::Server::bind(&"0.0.0.0:8080".parse().unwrap())
+            .serve(app.into_make_service())
+            .await
+            .unwrap();
     });
 
     // start listening for events by starting a single shard
@@ -379,4 +408,14 @@ async fn export(ctx: &Context, msg: &Message) -> CommandResult {
     }
 
     Ok(())
+}
+
+async fn metrics() -> String {
+    let reg = once_cell::sync::Lazy::force(&REGISTRY);
+
+    let encoder = prometheus::TextEncoder::new();
+    let metrics_family = reg.gather();
+    let encoded = encoder.encode_to_string(&metrics_family).unwrap();
+
+    encoded
 }
