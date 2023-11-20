@@ -1,5 +1,6 @@
 use std::{borrow::Cow, collections::HashMap};
 
+use chrono::Datelike;
 use serde::Deserialize;
 
 use crate::{
@@ -376,6 +377,16 @@ pub async fn update_names(
 pub async fn update_cwl(client: &Client, clan: &ClanTag, storage: &mut Storage) -> Result<(), ()> {
     let w = match client.clan_war_league_group(clan).await {
         Ok(w) => w,
+        Err(LoadError::NotOkResponse(resp)) if resp == reqwest::StatusCode::NOT_FOUND => {
+            let now = chrono::Utc::now();
+            if now.day() > 10 {
+                tracing::debug!("Ignoring CWL Not found");
+                return Ok(());
+            } else {
+                tracing::error!("Loading Clan War League Group - NotOk: {:?}", resp);
+                return Err(());
+            }
+        }
         Err(e) => {
             tracing::error!("Loading Clan War League Group: {:?}", e);
             return Err(());
