@@ -225,8 +225,9 @@ impl Client {
             }
         };
 
-        if !resp.status().is_success() {
-            return Err(LoadError::NotOkResponse(resp.status()));
+        let status = resp.status();
+        if !status.is_success() {
+            return Err(LoadError::NotOkResponse(status));
         }
 
         resp.json().await.map_err(|e| LoadError::Deserialize(e))
