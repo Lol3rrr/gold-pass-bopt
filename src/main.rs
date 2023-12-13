@@ -55,10 +55,10 @@ async fn main() {
 
     let mut storage_backend = args
         .subcommand_matches("bot")
-        .unwrap()
+        .expect("Missing subcommand")
         .get_one::<String>("storage")
         .map(|arg: &String| gold_pass_bot::parse_storage(&arg))
-        .unwrap()
+        .expect("Missing Storage")
         .unwrap();
 
     let api_path = std::env::var("API_PATH").unwrap_or_else(|_| "api.key".to_string());
