@@ -29,16 +29,27 @@ impl StorageBackend for S3Storage {
 
             tracing::trace!("Storing to S3 Bucket");
 
+            if let Ok(previous) = bucket.get_object(filename.clone()).await {
+                let previous_content = previous.to_vec();
+
+                if content == previous_content {
+                    tracing::trace!("Skipping upload as content is the same");
+                    return Ok(());
+                }
+            }
+
             let res = bucket.put_object_with_content_type(&filename, &content, "application/json");
 
             match res.await {
-                Ok(_) => Ok(()),
+                Ok(_) => {}
                 Err(e) => {
                     tracing::error!("{:?}", e);
 
-                    Err(())
+                    return Err(());
                 }
-            }
+            };
+
+            Ok(())
         })
     }
 
